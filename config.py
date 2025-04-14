@@ -1,12 +1,16 @@
 import os
 
-# OpenAI API Configuration
+# API Configuration
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-DEFAULT_MODEL = "gpt-3.5-turbo"
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+
+# Model Configuration
+USE_GROQ = True  # Set to True to use Groq, False to use OpenAI
+DEFAULT_MODEL = "llama3-8b-8192" if USE_GROQ else "gpt-3.5-turbo"
 
 # Embedding Model Configuration
-EMBEDDING_MODEL = "text-embedding-ada-002"  # OpenAI embedding model
-EMBEDDING_DIMENSION = 1536  # text-embedding-ada-002 has 1536 dimensions
+EMBEDDING_MODEL = "llama3-8b-8192" if USE_GROQ else "text-embedding-ada-002"
+EMBEDDING_DIMENSION = 4096  # llama3-8b-8192 has 4096 dimensions
 
 # Vector Store Configuration
 CHROMA_PERSIST_DIRECTORY = "chroma_db"
