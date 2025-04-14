@@ -14,7 +14,7 @@ COLLECTION_NAME = "code_documentation"
 
 # Crawler Configuration
 MAX_URLS = 1000  # Maximum number of URLs to crawl
-MAX_WORKERS = max(1, os.cpu_count() - 1)  # Use all available cores except one
+MAX_WORKERS = 2  # Default to 2 workers
 TIMEOUT = 30  # Timeout in seconds for web requests
 USER_AGENT = "Mozilla/5.0 (compatible; CodeDocumentationCrawler/1.0)"
 
