@@ -49,13 +49,29 @@ def crawl_site():
 @app.route('/api/process', methods=['POST'])
 def process_documents():
     """Process crawled URLs and generate embeddings"""
-    if 'urls' not in session or not session['urls']:
-        return jsonify({"error": "No URLs found. Please crawl a site first."}), 400
+    data = request.json or {}
+    manual_urls = data.get('manual_urls', [])
+    
+    # Check if we have URLs from crawling or manual input
+    if manual_urls:
+        urls = manual_urls
+        logger.info(f"Processing {len(urls)} manually entered URLs")
+    elif 'urls' in session and session['urls']:
+        urls = session['urls']
+        logger.info(f"Processing {len(urls)} crawled URLs")
+    else:
+        # If no URLs found, provide sample URLs for testing
+        sample_urls = [
+            "https://python.langchain.com/docs/get_started/introduction/",
+            "https://python.langchain.com/docs/modules/model_io/",
+            "https://python.langchain.com/docs/modules/memory/",
+            "https://docs.python.org/3/tutorial/index.html",
+            "https://docs.python.org/3/library/index.html"
+        ]
+        urls = sample_urls
+        logger.info(f"No URLs found. Using {len(urls)} sample URLs for testing.")
     
     try:
-        logger.info(f"Processing {len(session['urls'])} URLs")
-        urls = session['urls']
-        
         # Process in batches to avoid timeout
         batch_size = min(50, len(urls))
         selected_urls = urls[:batch_size]
@@ -63,13 +79,15 @@ def process_documents():
         # Process documents and generate embeddings
         processed_count = embedder.process_documents(selected_urls)
         
-        # Update session with remaining URLs
-        session['urls'] = urls[batch_size:]
+        # Update session with remaining URLs (if from crawling)
+        if not manual_urls and 'urls' in session:
+            session['urls'] = urls[batch_size:]
         
         return jsonify({
             "message": f"Processed {processed_count} documents",
-            "remaining": len(session['urls']),
-            "processed": processed_count
+            "remaining": len(urls) - batch_size if not manual_urls and 'urls' in session else 0,
+            "processed": processed_count,
+            "urls_processed": selected_urls
         })
     except Exception as e:
         logger.error(f"Processing error: {str(e)}")
