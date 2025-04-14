@@ -9,12 +9,14 @@ venv/
 
 # Replit-specific files
 .replit
+replit.nix
 
-# VSCode editor files
-.vscode/
-
-# Dependency lock files (if not needed)
+# Dependency lock files
 uv.lock
 
-# Editor backups
+# Generated files (add any generated files here)
+generated-icon.png
+
+# Editor-specific files (e.g., VSCode, etc.)
+.vscode/
 *~.swp
