@@ -165,6 +165,11 @@ class DocumentEmbedder:
             bool: True if successful, False otherwise
         """
         try:
+            # Simple validation check
+            if not url or not url.startswith('http'):
+                logger.warning(f"Invalid URL: {url}")
+                return False
+                
             # Generate a document ID from the URL
             doc_id = hashlib.md5(url.encode()).hexdigest()
             
@@ -177,17 +182,27 @@ class DocumentEmbedder:
             except Exception:
                 pass  # If the document doesn't exist, continue processing
             
-            # Fetch and extract content
-            content = self.extract_content(url)
+            # Fetch and extract content with a shorter timeout
+            content = self.extract_content(url, timeout=10)
             if not content:
                 logger.warning(f"No content extracted from {url}")
                 return False
             
+            # Limit content size to prevent memory issues
+            if len(content) > 100000:  # ~100KB limit
+                content = content[:100000]
+                logger.warning(f"Content from {url} was truncated due to size")
+            
             # Split content into chunks for better retrieval
-            chunks = self.chunk_text(content)
+            chunks = self.chunk_text(content, chunk_size=500)  # Smaller chunks
             if not chunks:
                 logger.warning(f"No chunks generated for {url}")
                 return False
+            
+            # Limit number of chunks to prevent memory issues
+            if len(chunks) > 50:
+                chunks = chunks[:50]
+                logger.warning(f"Number of chunks from {url} was limited to 50")
             
             # Add document chunks to ChromaDB
             chunk_ids = [f"{doc_id}_{i}" for i in range(len(chunks))]
@@ -206,31 +221,46 @@ class DocumentEmbedder:
             logger.error(f"Error processing document {url}: {e}")
             return False
     
-    def extract_content(self, url):
+    def extract_content(self, url, timeout=None):
         """
         Extract content from a URL
         
         Args:
             url (str): URL to extract content from
+            timeout (int, optional): Timeout in seconds
             
         Returns:
             str: Extracted content
         """
+        if timeout is None:
+            timeout = TIMEOUT
+            
         try:
             # First try trafilatura, which is good at getting main content
-            downloaded = trafilatura.fetch_url(url)
+            downloaded = trafilatura.fetch_url(url, timeout=timeout)
             if downloaded:
+                # Set a maximum size limit to prevent processing huge pages
+                if len(downloaded) > 500000:  # ~500KB limit
+                    downloaded = downloaded[:500000]
+                    logger.warning(f"Downloaded content from {url} was truncated due to size")
+                
                 content = trafilatura.extract(downloaded, include_formatting=True, include_links=True)
                 if content and len(content) > 100:  # Ensure we have meaningful content
                     return content
             
             # Fallback to a more basic approach if trafilatura fails
-            response = self.session.get(url, timeout=TIMEOUT)
+            response = self.session.get(url, timeout=timeout)
             if response.status_code != 200:
                 logger.warning(f"Failed to fetch {url}: HTTP {response.status_code}")
                 return None
             
-            soup = BeautifulSoup(response.text, 'html.parser')
+            # Set a maximum size limit to prevent processing huge pages
+            text = response.text
+            if len(text) > 500000:  # ~500KB limit
+                text = text[:500000]
+                logger.warning(f"Response content from {url} was truncated due to size")
+            
+            soup = BeautifulSoup(text, 'html.parser')
             
             # Remove script, style, and header/footer elements
             for element in soup(['script', 'style', 'header', 'footer', 'nav']):
