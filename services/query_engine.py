@@ -1,14 +1,11 @@
 import os
 import logging
-import openai
 import groq
 from config import (
-    OPENAI_API_KEY, 
     GROQ_API_KEY, 
     DEFAULT_MODEL, 
     MAX_TOKENS, 
-    TEMPERATURE,
-    USE_GROQ
+    TEMPERATURE
 )
 
 # Set up logging
@@ -18,7 +15,7 @@ logger = logging.getLogger(__name__)
 class QueryEngine:
     """
     Engine for generating responses to user queries using the RAG approach.
-    Uses either Groq or OpenAI's API to generate responses based on retrieved context.
+    Uses Groq's API to generate responses based on retrieved context.
     """
     
     def __init__(self, model=DEFAULT_MODEL, api_key=None):
@@ -26,22 +23,15 @@ class QueryEngine:
         Initialize the query engine with the appropriate API client
         
         Args:
-            model (str): Model to use (Groq or OpenAI)
+            model (str): Model to use (Groq API)
             api_key (str): API key
         """
         self.model = model
         
-        # Select the appropriate client based on configuration
-        if USE_GROQ:
-            logger.info("Using Groq for query engine")
-            self.api_key = api_key or GROQ_API_KEY
-            self.client = groq.Groq(api_key=self.api_key)
-            self.use_groq = True
-        else:
-            logger.info("Using OpenAI for query engine")
-            self.api_key = api_key or OPENAI_API_KEY
-            self.client = openai.OpenAI(api_key=self.api_key)
-            self.use_groq = False
+        # Initialize Groq client
+        logger.info("Using Groq for query engine")
+        self.api_key = api_key or GROQ_API_KEY
+        self.client = groq.Groq(api_key=self.api_key)
         
         # System prompt template for the RAG assistant
         self.system_prompt = """

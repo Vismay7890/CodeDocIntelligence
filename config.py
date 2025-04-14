@@ -9,8 +9,9 @@ USE_GROQ = True  # Set to True to use Groq, False to use OpenAI
 DEFAULT_MODEL = "llama3-8b-8192" if USE_GROQ else "gpt-3.5-turbo"
 
 # Embedding Model Configuration
-EMBEDDING_MODEL = "llama3-8b-8192" if USE_GROQ else "text-embedding-ada-002"
-EMBEDDING_DIMENSION = 4096  # llama3-8b-8192 has 4096 dimensions
+USE_CUSTOM_EMBEDDINGS = True  # Set to True to use our own embedding function
+EMBEDDING_MODEL = "custom-hash-embeddings"
+EMBEDDING_DIMENSION = 768  # Fixed dimension for our custom embeddings
 
 # Vector Store Configuration
 CHROMA_PERSIST_DIRECTORY = "chroma_db"

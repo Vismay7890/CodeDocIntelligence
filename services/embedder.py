@@ -10,8 +10,6 @@ import trafilatura
 import hashlib
 import re
 import numpy as np
-import groq
-import openai
 from config import (
     EMBEDDING_MODEL,
     EMBEDDING_DIMENSION,
@@ -20,27 +18,30 @@ from config import (
     TIMEOUT,
     USER_AGENT,
     MAX_WORKERS,
-    OPENAI_API_KEY,
-    GROQ_API_KEY,
-    USE_GROQ
+    USE_CUSTOM_EMBEDDINGS
 )
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-class GroqEmbeddingFunction(embedding_functions.EmbeddingFunction):
+class HashEmbeddingFunction(embedding_functions.EmbeddingFunction):
     """
-    Custom embedding function using Groq's API for embeddings
+    Custom embedding function using hash-based techniques for generating embeddings.
+    This doesn't require external API calls and works fully locally.
     """
-    def __init__(self, api_key=None, model_name="llama3-8b-8192"):
-        self.api_key = api_key or GROQ_API_KEY
-        self.model_name = model_name
-        self.client = groq.Groq(api_key=self.api_key)
+    def __init__(self):
+        # Set a fixed dimension for the embeddings
+        self.dimension = EMBEDDING_DIMENSION
+        # Fixed seed for consistent embeddings across runs
+        self.seed = 42
+        np.random.seed(self.seed)
+        # Pre-generate random projection vectors (this gives us semantic-like matching)
+        self.projection_vectors = np.random.normal(0, 1, (self.dimension, 1000))
         
     def __call__(self, texts):
         """
-        Generate embeddings for a list of texts using Groq
+        Generate embeddings for a list of texts using hash-based techniques
         
         Args:
             texts (list): List of texts to embed
@@ -54,98 +55,84 @@ class GroqEmbeddingFunction(embedding_functions.EmbeddingFunction):
                 return []
             
             embeddings = []
-            # Process in batches to avoid API limits
-            batch_size = 10
             
-            for i in range(0, len(texts), batch_size):
-                batch = texts[i:i+batch_size]
+            for text in texts:
+                # Create a feature vector from the text
+                feature_vector = self._extract_features(text)
                 
-                # For each text in batch, create an embedding
-                batch_embeddings = []
-                for text in batch:
-                    # Get chat completion as a proxy for embedding
-                    completion = self.client.chat.completions.create(
-                        model=self.model_name,
-                        messages=[
-                            {
-                                "role": "system", 
-                                "content": "You are an embedding generator. Generate a numerical representation of the given text."
-                            },
-                            {
-                                "role": "user",
-                                "content": text
-                            }
-                        ],
-                        temperature=0.0,
-                        max_tokens=1
-                    )
-                    
-                    # Use hash of response to create a deterministic vector
-                    # This is a simplification - in production, use a proper embedding model
-                    response_text = completion.choices[0].message.content
-                    # Create a hash and convert to a fixed-length embedding
-                    # Using a smaller hash value as seed to avoid "Seed must be between 0 and 2**32 - 1" error
-                    hash_bytes = hashlib.sha256(response_text.encode()).digest()[:4]
-                    hash_value = int.from_bytes(hash_bytes, byteorder='little')
-                    np.random.seed(hash_value % (2**32 - 1))
-                    # Generate a fixed-length pseudo-random embedding
-                    embedding = np.random.normal(0, 1, EMBEDDING_DIMENSION).tolist()
-                    batch_embeddings.append(embedding)
+                # Project the features to get embedding-like representation
+                embedding = np.dot(self.projection_vectors, feature_vector)
                 
-                embeddings.extend(batch_embeddings)
+                # Normalize to unit length (important for cosine similarity)
+                embedding_norm = np.linalg.norm(embedding)
+                if embedding_norm > 0:
+                    embedding = embedding / embedding_norm
                 
+                # Convert to list and add to results
+                embeddings.append(embedding.flatten().tolist())
+            
             return embeddings
         except Exception as e:
-            logger.error(f"Error generating embeddings with Groq: {e}")
+            logger.error(f"Error generating hash embeddings: {e}")
             # Return zero embeddings as fallback
-            return [[0.0] * EMBEDDING_DIMENSION] * len(texts)
-
-class OpenAIEmbeddingFunction(embedding_functions.EmbeddingFunction):
-    """
-    Custom embedding function using OpenAI's text-embedding API
-    """
-    def __init__(self, api_key=None, model_name="text-embedding-ada-002"):
-        self.api_key = api_key or OPENAI_API_KEY
-        self.model_name = model_name
-        self.client = openai.OpenAI(api_key=self.api_key)
-        
-    def __call__(self, texts):
+            return [[0.0] * self.dimension] * len(texts)
+    
+    def _extract_features(self, text):
         """
-        Generate embeddings for a list of texts
+        Extract feature vector from text using various techniques
         
         Args:
-            texts (list): List of texts to embed
+            text (str): Input text
             
         Returns:
-            list: List of embeddings
+            numpy.ndarray: Feature vector
         """
-        try:
-            # Handle empty texts
-            if not texts:
-                return []
+        # Initialize feature vector (all zeros)
+        feature_vec = np.zeros(1000)
+        
+        if not text:
+            return feature_vec
+        
+        # Normalize text
+        text = text.lower()
+        
+        # Extract word-level features
+        words = re.findall(r'\b\w+\b', text)
+        
+        # Calculate word hashes and update feature vector
+        for i, word in enumerate(words):
+            # Get word hash
+            word_hash = int(hashlib.md5(word.encode()).hexdigest(), 16) % 1000
             
-            embeddings = []
-            # Process in batches to avoid API limits
-            batch_size = 20
+            # Position-aware weighting (words at beginning/end matter more)
+            position_weight = 1.0
+            if i < len(words) * 0.2:  # First 20% of words
+                position_weight = 1.5
+            elif i > len(words) * 0.8:  # Last 20% of words
+                position_weight = 1.2
+                
+            # Update feature at the hashed position
+            feature_vec[word_hash] += position_weight
             
-            for i in range(0, len(texts), batch_size):
-                batch = texts[i:i+batch_size]
-                
-                # Call OpenAI API to get embeddings
-                response = self.client.embeddings.create(
-                    model=self.model_name,
-                    input=batch
-                )
-                
-                # Extract embeddings from response
-                batch_embeddings = [item.embedding for item in response.data]
-                embeddings.extend(batch_embeddings)
-                
-            return embeddings
-        except Exception as e:
-            logger.error(f"Error generating embeddings with OpenAI: {e}")
-            # Return zero embeddings as fallback
-            return [[0.0] * EMBEDDING_DIMENSION] * len(texts)
+            # Add bigram features if possible
+            if i < len(words) - 1:
+                bigram = word + " " + words[i+1]
+                bigram_hash = int(hashlib.md5(bigram.encode()).hexdigest(), 16) % 1000
+                feature_vec[bigram_hash] += 0.5  # Lower weight for bigrams
+        
+        # Extract character n-gram features
+        for n in [3, 4]:  # trigrams and quadgrams
+            for i in range(len(text) - n + 1):
+                ngram = text[i:i+n]
+                ngram_hash = int(hashlib.md5(ngram.encode()).hexdigest(), 16) % 1000
+                feature_vec[ngram_hash] += 0.2  # Low weight for character n-grams
+        
+        # Normalize the feature vector
+        norm = np.linalg.norm(feature_vec)
+        if norm > 0:
+            feature_vec = feature_vec / norm
+            
+        return feature_vec
 
 
 class DocumentEmbedder:
@@ -159,19 +146,9 @@ class DocumentEmbedder:
         # Set up ChromaDB client
         self.client = chromadb.PersistentClient(path=CHROMA_PERSIST_DIRECTORY)
         
-        # Set up the embedding function based on configuration
-        if USE_GROQ:
-            logger.info("Using Groq for embeddings")
-            self.embedding_function = GroqEmbeddingFunction(
-                api_key=GROQ_API_KEY,
-                model_name=EMBEDDING_MODEL
-            )
-        else:
-            logger.info("Using OpenAI for embeddings")
-            self.embedding_function = OpenAIEmbeddingFunction(
-                api_key=OPENAI_API_KEY,
-                model_name="text-embedding-ada-002"
-            )
+        # Use our custom hash-based embedding function
+        logger.info("Using custom hash-based embeddings")
+        self.embedding_function = HashEmbeddingFunction()
         
         # Check for and create collection if it doesn't exist
         try:
