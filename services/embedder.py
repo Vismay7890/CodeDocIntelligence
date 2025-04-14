@@ -27,17 +27,11 @@ logger = logging.getLogger(__name__)
 
 class HashEmbeddingFunction(embedding_functions.EmbeddingFunction):
     """
-    Custom embedding function using hash-based techniques for generating embeddings.
-    This doesn't require external API calls and works fully locally.
+    Very simple hash-based embedding function that works locally.
     """
     def __init__(self):
         # Set a fixed dimension for the embeddings
         self.dimension = EMBEDDING_DIMENSION
-        # Fixed seed for consistent embeddings across runs
-        self.seed = 42
-        np.random.seed(self.seed)
-        # Pre-generate random projection vectors (this gives us semantic-like matching)
-        self.projection_vectors = np.random.normal(0, 1, (self.dimension, 1000))
         
     def __call__(self, texts):
         """
@@ -49,90 +43,56 @@ class HashEmbeddingFunction(embedding_functions.EmbeddingFunction):
         Returns:
             list: List of embeddings
         """
-        try:
-            # Handle empty texts
-            if not texts:
-                return []
-            
-            embeddings = []
-            
-            for text in texts:
-                # Create a feature vector from the text
-                feature_vector = self._extract_features(text)
-                
-                # Project the features to get embedding-like representation
-                embedding = np.dot(self.projection_vectors, feature_vector)
-                
-                # Normalize to unit length (important for cosine similarity)
-                embedding_norm = np.linalg.norm(embedding)
-                if embedding_norm > 0:
-                    embedding = embedding / embedding_norm
-                
-                # Convert to list and add to results
-                embeddings.append(embedding.flatten().tolist())
-            
-            return embeddings
-        except Exception as e:
-            logger.error(f"Error generating hash embeddings: {e}")
-            # Return zero embeddings as fallback
-            return [[0.0] * self.dimension] * len(texts)
+        if not texts:
+            return []
+        
+        embeddings = []
+        for text in texts:
+            # Create a simple hash-based embedding
+            embedding = self._create_simple_embedding(text)
+            embeddings.append(embedding)
+        
+        return embeddings
     
-    def _extract_features(self, text):
+    def _create_simple_embedding(self, text):
         """
-        Extract feature vector from text using various techniques
+        Create a simple deterministic embedding from text using hashing
         
         Args:
-            text (str): Input text
+            text (str): Text to embed
             
         Returns:
-            numpy.ndarray: Feature vector
+            list: Embedding vector
         """
-        # Initialize feature vector (all zeros)
-        feature_vec = np.zeros(1000)
+        # Initialize with zeros
+        embedding = [0.0] * self.dimension
         
         if not text:
-            return feature_vec
+            return embedding
         
-        # Normalize text
+        # Normalize and tokenize text
         text = text.lower()
-        
-        # Extract word-level features
         words = re.findall(r'\b\w+\b', text)
         
-        # Calculate word hashes and update feature vector
+        # Generate embedding based on word hashes
         for i, word in enumerate(words):
-            # Get word hash
-            word_hash = int(hashlib.md5(word.encode()).hexdigest(), 16) % 1000
+            # Create a deterministic hash for the word
+            hash_obj = hashlib.md5(word.encode('utf-8'))
+            hash_int = int(hash_obj.hexdigest(), 16)
             
-            # Position-aware weighting (words at beginning/end matter more)
-            position_weight = 1.0
-            if i < len(words) * 0.2:  # First 20% of words
-                position_weight = 1.5
-            elif i > len(words) * 0.8:  # Last 20% of words
-                position_weight = 1.2
-                
-            # Update feature at the hashed position
-            feature_vec[word_hash] += position_weight
-            
-            # Add bigram features if possible
-            if i < len(words) - 1:
-                bigram = word + " " + words[i+1]
-                bigram_hash = int(hashlib.md5(bigram.encode()).hexdigest(), 16) % 1000
-                feature_vec[bigram_hash] += 0.5  # Lower weight for bigrams
+            # Use the hash to determine which dimensions to update
+            # and what values to set
+            for j in range(10):  # Update multiple dimensions per word
+                dim = (hash_int + j) % self.dimension
+                val = ((hash_int % 10000) / 10000.0) * 2.0 - 1.0  # Value between -1 and 1
+                embedding[dim] += val
         
-        # Extract character n-gram features
-        for n in [3, 4]:  # trigrams and quadgrams
-            for i in range(len(text) - n + 1):
-                ngram = text[i:i+n]
-                ngram_hash = int(hashlib.md5(ngram.encode()).hexdigest(), 16) % 1000
-                feature_vec[ngram_hash] += 0.2  # Low weight for character n-grams
-        
-        # Normalize the feature vector
-        norm = np.linalg.norm(feature_vec)
-        if norm > 0:
-            feature_vec = feature_vec / norm
+        # Normalize the embedding to unit length
+        magnitude = sum(x**2 for x in embedding) ** 0.5
+        if magnitude > 0:
+            embedding = [x/magnitude for x in embedding]
             
-        return feature_vec
+        return embedding
 
 
 class DocumentEmbedder:
