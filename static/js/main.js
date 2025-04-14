@@ -129,6 +129,11 @@ document.addEventListener('DOMContentLoaded', function() {
         embeddingResults.classList.add('d-none');
         noEmbeddingsMessage.classList.add('d-none');
         
+        // If no URLs were crawled, we'll use sample URLs and set a total
+        if (totalUrlsToProcess === 0) {
+            totalUrlsToProcess = 5;  // Sample URLs count
+        }
+        
         // Update progress bar
         updateProgressBar(0);
         
@@ -138,7 +143,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Function to process the next batch of URLs
     function processNextBatch() {
-        // Check if we have sample URLs (in case user didn't crawl first)
+        // Define sample URLs (in case user didn't crawl first)
         const sampleUrls = [
             "https://python.langchain.com/docs/get_started/introduction/",
             "https://python.langchain.com/docs/modules/model_io/",
@@ -155,6 +160,7 @@ document.addEventListener('DOMContentLoaded', function() {
             body: JSON.stringify({
                 manual_urls: totalUrlsToProcess === 0 ? sampleUrls : []
             })
+        })
         .then(response => {
             if (!response.ok) {
                 throw new Error('Processing failed: ' + response.statusText);
