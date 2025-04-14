@@ -1,8 +1,20 @@
-# Use Set-Content or Out-File
-"venv/" | Out-File -Encoding utf8 .gitignore
-"chroma_db/" | Out-File -Encoding utf8 -Append .gitignore
-"__pycache__/" | Out-File -Encoding utf8 -Append .gitignore
-"*.pyc" | Out-File -Encoding utf8 -Append .gitignore
-".env" | Out-File -Encoding utf8 -Append .gitignore
-".DS_Store" | Out-File -Encoding utf8 -Append .gitignore
-"Thumbs.db" | Out-File -Encoding utf8 -Append .gitignore
+# Python cache files
+__pycache__/
+
+# Virtual environment folder
+venv/
+
+# Environment variables
+.env
+
+# Replit-specific files
+.replit
+
+# VSCode editor files
+.vscode/
+
+# Dependency lock files (if not needed)
+uv.lock
+
+# Editor backups
+*~.swp
