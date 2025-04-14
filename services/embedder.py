@@ -84,8 +84,10 @@ class GroqEmbeddingFunction(embedding_functions.EmbeddingFunction):
                     # This is a simplification - in production, use a proper embedding model
                     response_text = completion.choices[0].message.content
                     # Create a hash and convert to a fixed-length embedding
-                    hash_value = int(hashlib.sha256(response_text.encode()).hexdigest(), 16)
-                    np.random.seed(hash_value)
+                    # Using a smaller hash value as seed to avoid "Seed must be between 0 and 2**32 - 1" error
+                    hash_bytes = hashlib.sha256(response_text.encode()).digest()[:4]
+                    hash_value = int.from_bytes(hash_bytes, byteorder='little')
+                    np.random.seed(hash_value % (2**32 - 1))
                     # Generate a fixed-length pseudo-random embedding
                     embedding = np.random.normal(0, 1, EMBEDDING_DIMENSION).tolist()
                     batch_embeddings.append(embedding)
