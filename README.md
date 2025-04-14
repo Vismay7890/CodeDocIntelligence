@@ -1,5 +1,7 @@
 # Code Documentation RAG Assistant
 
+
+
 A RAG-based code documentation assistant that crawls documentation websites, generates embeddings, and provides accurate answers to code-related queries using LLMs.
 
 ## Features
@@ -28,7 +30,7 @@ A RAG-based code documentation assistant that crawls documentation websites, gen
 
 2. Install the required packages:
    ```
-   pip install -r requirements.txt
+   pip install beautifulsoup4 chromadb flask flask-sqlalchemy groq gunicorn numpy psycopg2-binary requests trafilatura
    ```
 
 3. Set up environment variables:

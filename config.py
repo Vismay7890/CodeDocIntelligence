@@ -1,7 +1,6 @@
 import os
 
 # API Configuration
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 
 # Model Configuration
@@ -26,3 +25,4 @@ USER_AGENT = "Mozilla/5.0 (compatible; CodeDocumentationCrawler/1.0)"
 # Query Engine Configuration
 MAX_TOKENS = 1024
 TEMPERATURE = 0.3
+MAX_URLS_TO_PROCESS_PER_REQUEST = 50

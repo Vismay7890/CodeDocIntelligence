@@ -142,63 +142,85 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Function to process the next batch of URLs
-    function processNextBatch() {
-        // Define sample URLs (in case user didn't crawl first)
-        const sampleUrls = [
-            "https://python.langchain.com/docs/get_started/introduction/",
-            "https://python.langchain.com/docs/modules/model_io/",
-            "https://python.langchain.com/docs/modules/memory/",
-            "https://docs.python.org/3/tutorial/index.html",
-            "https://docs.python.org/3/library/index.html"
-        ];
-
-        fetch('/api/process', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                manual_urls: totalUrlsToProcess === 0 ? sampleUrls : []
+        // Function to process the next batch of URLs
+        function processNextBatch() {
+            // // Define sample URLs (in case user didn't crawl first) - Not needed here, handled by backend now
+            // const sampleUrls = [ ... ];
+    
+            fetch('/api/process', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                // The backend now handles using session or samples, so send empty body if not manual
+                body: JSON.stringify({}) 
             })
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Processing failed: ' + response.statusText);
-            }
-            return response.json();
-        })
-        .then(data => {
-            // Update processed count
-            processedUrls += data.processed;
-            
-            // Update progress
-            const progress = Math.min(100, Math.round((processedUrls / totalUrlsToProcess) * 100));
-            updateProgressBar(progress);
-            
-            embeddingMessage.textContent = `Processing documents: ${processedUrls}/${totalUrlsToProcess} (${progress}%)`;
-            
-            // If there are more URLs to process, continue
-            if (data.remaining > 0) {
-                // Continue with next batch after a short delay
-                setTimeout(processNextBatch, 1000);
-            } else {
-                // Processing complete
-                embeddingStatus.classList.add('d-none');
-                embeddingResults.classList.remove('d-none');
-                embeddingResultsMessage.textContent = `Successfully processed ${processedUrls} documents.`;
-                processBtn.disabled = false;
+            .then(response => {
+                if (!response.ok) {
+                     // Try to get error message from backend if possible
+                     return response.json().then(err => { throw new Error(err.error || `Processing failed: ${response.status} ${response.statusText}`) });
+                }
+                return response.json();
+            })
+            .then(data => {
+                // --- CORRECTED LOGIC ---
+                // Update processed count using the correct field from the response
+                const countFromBatch = data.processed_in_batch; // Use the correct key
                 
-                // Refresh database status
-                loadDatabaseStatus();
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            embeddingStatus.classList.add('d-none');
-            alert('Error during processing: ' + error.message);
-            processBtn.disabled = false;
-        });
-    }
+                // Ensure it's a number, default to 0 if missing/invalid
+                const validCount = (typeof countFromBatch === 'number' && !isNaN(countFromBatch)) ? countFromBatch : 0;
+                processedUrls += validCount; 
+                
+                // Update progress (use totalUrlsToProcess if available, otherwise estimate based on batch size?)
+                // Need to ensure totalUrlsToProcess was set correctly by crawl step or a default
+                let progress = 0;
+                let progressText = '';
+                if (totalUrlsToProcess > 0) {
+                     progress = Math.min(100, Math.round((processedUrls / totalUrlsToProcess) * 100));
+                     progressText = `Processing documents: ${processedUrls}/${totalUrlsToProcess} (${progress}%)`;
+                } else {
+                     // If totalUrlsToProcess wasn't set (e.g., user clicked Process without Crawl), 
+                     // the progress bar might not be accurate. Show cumulative count.
+                     progressText = `Processing documents... Batch processed ${validCount}. Total processed: ${processedUrls}`;
+                     // Maybe set progress to 100 if data.remaining is 0?
+                     if(data.remaining_in_session === 0) progress = 100; 
+                }
+               
+                updateProgressBar(progress);
+                embeddingMessage.textContent = progressText; // Update message
+                
+                // If there are more URLs to process (check the correct key from response)
+                // Use remaining_in_session as defined in your updated app.py response
+                if (data.remaining_in_session > 0) { 
+                    // Continue with next batch after a short delay
+                    setTimeout(processNextBatch, 1000); 
+                } else {
+                    // Processing complete (either finished session or was manual/sample)
+                    embeddingStatus.classList.add('d-none');
+                    embeddingResults.classList.remove('d-none');
+                    
+                    // Use the final cumulative count for the message
+                    embeddingResultsMessage.textContent = `Successfully processed ${processedUrls} documents.`; 
+                    
+                    processBtn.disabled = false;
+                    totalUrlsToProcess = 0; // Reset for next potential crawl
+                    processedUrls = 0; // Reset counter
+                    
+                    // Refresh database status
+                    loadDatabaseStatus();
+                }
+                // --- END CORRECTED LOGIC ---
+            })
+            .catch(error => {
+                console.error('Error during processing batch:', error);
+                embeddingStatus.classList.add('d-none');
+                embeddingResults.classList.remove('d-none'); // Show results area even on error
+                embeddingResultsMessage.textContent = 'Error during processing: ' + error.message; // Show error message
+                processBtn.disabled = false;
+                 totalUrlsToProcess = 0; // Reset 
+                 processedUrls = 0; 
+            });
+        }
     
     // Function to update progress bar
     function updateProgressBar(percentage) {
